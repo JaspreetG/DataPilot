@@ -26,17 +26,15 @@ services:
     volumes:
       - ollama_data:/root/.ollama
     healthcheck:
-      # Check if server is reachable before pulling
       test: "ollama list || exit 1"
       interval: 10s
       timeout: 30s
       retries: 5
       start_period: 10s
 
-  # 3. Model Puller (Downloads sqlcoder:7b automatically)
+  # 3. Model Puller (ONLY Qwen 1.5B)
   ollama-init:
     image: ollama/ollama
-    # Link to the main server
     environment:
       - OLLAMA_HOST=ollama:11434
     depends_on:
@@ -45,9 +43,10 @@ services:
     entrypoint: /bin/sh
     command:
       - "-c"
-      - "echo 'Waiting for Ollama...'; ollama pull sqlcoder:7b; ollama pull llama3; echo 'Done!'"
+      # Just one small, fast model for everything
+      - "echo 'Waiting...'; ollama pull qwen2.5-coder:1.5b; echo 'Done!'"
 
-  # 4. Your Python App
+  # 4. Backend (API)
   backend:
     build: ./app
     ports:
@@ -60,11 +59,23 @@ services:
         condition: service_healthy
       ollama:
         condition: service_healthy
-      # Wait for the models to finish downloading
       ollama-init:
         condition: service_completed_successfully
     volumes:
       - ./app:/code
+
+  # 5. Frontend (React)
+  frontend:
+    build: ./frontend
+    ports:
+      - "5173:5173"
+    environment:
+      - VITE_API_URL=http://localhost:8000
+    depends_on:
+      - backend
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
 
 volumes:
   ollama_data:
